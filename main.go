@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"syncr/utils"
+	"syncr/helper"
 )
 
 func main() {
@@ -24,7 +24,7 @@ func main() {
 	src := args[0]
 	target := args[1]
 
-	fmt.Println("Source:", src, "->", utils.IsDirectory(src))
-	fmt.Println("Target:", target, "->", utils.IsDirectory(target))
+	fmt.Println("Source:", src, "->", helper.IsDirectory(src))
+	fmt.Println("Target:", target, "->", helper.IsDirectory(target))
 	fmt.Println("Skip:", *deleteFlag)
 }
