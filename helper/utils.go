@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func IsDirectory(path string) bool {
@@ -30,8 +31,11 @@ func IsDirectoryWritable(dir string) bool {
 }
 
 type FileData struct {
-	Name     string
-	Checksum string
+	Name        string
+	Checksum    string
+	Size        int64
+	ModTime     time.Time
+	Permissions os.FileMode
 }
 
 func CollectFileData(dir string) (files []FileData, err error) {
@@ -41,6 +45,11 @@ func CollectFileData(dir string) (files []FileData, err error) {
 		}
 
 		if d.Type().IsRegular() {
+			info, err := d.Info()
+			if err != nil {
+				return fmt.Errorf("cannot stat file %s: %w", path, err)
+			}
+
 			file, err := os.Open(path)
 			if err != nil {
 				return fmt.Errorf("cannot read file %s: %w", path, err)
@@ -52,10 +61,12 @@ func CollectFileData(dir string) (files []FileData, err error) {
 				return fmt.Errorf("error reading file %s: %w", path, err)
 			}
 
-			checksum := hex.EncodeToString(hash.Sum(nil))
 			files = append(files, FileData{
-				Name:     path,
-				Checksum: checksum,
+				Name:        path,
+				Checksum:    hex.EncodeToString(hash.Sum(nil)),
+				Size:        info.Size(),
+				ModTime:     info.ModTime(),
+				Permissions: info.Mode().Perm(),
 			})
 		}
 		return nil

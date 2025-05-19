@@ -26,7 +26,14 @@ func main() {
 
 	fmt.Println("Source:", src, "->", helper.IsDirectory(src))
 	fmt.Println("Target:", target, "->", helper.IsDirectory(target))
-	fmt.Println("Skip:", *deleteFlag)
+	fmt.Println("Delete-missing:", *deleteFlag)
+
+	write := helper.IsDirectoryWritable(target)
+	if !write {
+		fmt.Println("Target not writeable")
+		os.Exit(1)
+	}
+	fmt.Println("Target writeable")
 
 	res, err := helper.CollectFileData(src)
 	if err != nil {
@@ -42,6 +49,4 @@ func main() {
 	}
 	fmt.Printf("Files in target: %#+v\n", res2)
 
-	write := helper.IsDirectoryWritable(target)
-	fmt.Printf("Target writeable: %v\n", write)
 }

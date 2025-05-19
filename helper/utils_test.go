@@ -80,4 +80,12 @@ func TestCollectFileData(t *testing.T) {
 	if files[0].Checksum != checksum {
 		t.Errorf("expected checksum %s, got %s", checksum, files[0].Checksum)
 	}
+
+	if files[0].Size != int64(len(content)) {
+		t.Errorf("expected file size %d, got %d", len(content), files[0].Size)
+	}
+
+	if files[0].Permissions != 0o644 {
+		t.Errorf("expected file permission 0644, got %o", files[0].Permissions)
+	}
 }
