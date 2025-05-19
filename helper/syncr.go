@@ -113,24 +113,31 @@ func ExplainSyncActions(actions []SyncAction) {
 	}
 }
 
+type SyncDone struct{}
+
 func SyncFiles(actions []SyncAction, sourceRoot, targetRoot string, deleteMissing bool) {
 	var wg sync.WaitGroup
 	actionChan := make(chan SyncAction)
+	syncDoneChan := make(chan SyncDone)
 	var completed int64
 	total := int64(len(actions))
 	workerCount := optimalWorkerCount()
 
 	go func() {
+		ticker := time.NewTicker(200 * time.Millisecond)
+		defer ticker.Stop()
+
 		for {
-			done := atomic.LoadInt64(&completed)
-			percent := float64(done) / float64(total) * 100
-			fmt.Printf("\rProgress: %.2f%% (%d/%d)", percent, done, total)
-			if done == total {
-				break
+			select {
+			case <-ticker.C:
+				done := atomic.LoadInt64(&completed)
+				percent := float64(done) / float64(total) * 100
+				fmt.Printf("\rProgress: %.2f%% (%d/%d)", percent, done, total)
+			case <-syncDoneChan:
+				fmt.Printf("\rProgress: 100.00%% (%d/%d)\n", total, total)
+				return
 			}
-			time.Sleep(200 * time.Millisecond)
 		}
-		fmt.Println()
 	}()
 
 	for range workerCount {
@@ -143,7 +150,7 @@ func SyncFiles(actions []SyncAction, sourceRoot, targetRoot string, deleteMissin
 					srcPath := filepath.Join(sourceRoot, action.Source.Name)
 					dstPath := filepath.Join(targetRoot, action.Source.Name)
 
-					if err := copyFileWithModTime(srcPath, dstPath); err != nil {
+					if err := copyFileWithModTimeAndPermissions(srcPath, dstPath); err != nil {
 						fmt.Printf("\nERROR copying %s: %v\n", srcPath, err)
 					}
 				case Missing:
@@ -163,18 +170,19 @@ func SyncFiles(actions []SyncAction, sourceRoot, targetRoot string, deleteMissin
 		actionChan <- a
 	}
 	close(actionChan)
+	close(syncDoneChan)
 	wg.Wait()
 	return
 }
 
-func copyFileWithModTime(src, dst string) error {
+func copyFileWithModTimeAndPermissions(src, dst string) error {
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer srcFile.Close()
 
-	info, err := srcFile.Stat()
+	sourceInfo, err := srcFile.Stat()
 	if err != nil {
 		return err
 	}
@@ -188,8 +196,10 @@ func copyFileWithModTime(src, dst string) error {
 	if _, err := io.Copy(dstFile, srcFile); err != nil {
 		return err
 	}
-
-	return os.Chtimes(dst, info.ModTime(), info.ModTime())
+	if err := dstFile.Chmod(sourceInfo.Mode()); err != nil {
+		return err
+	}
+	return os.Chtimes(dst, sourceInfo.ModTime(), sourceInfo.ModTime())
 }
 
 func optimalWorkerCount() int {

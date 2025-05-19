@@ -24,10 +24,6 @@ func main() {
 	src := args[0]
 	target := args[1]
 
-	fmt.Println("Source:", src, "->", helper.IsDirectory(src))
-	fmt.Println("Target:", target, "->", helper.IsDirectory(target))
-	fmt.Println("Delete-missing:", *deleteFlag)
-
 	if !helper.IsDirectory(src) {
 		fmt.Println("Source not a directory")
 		os.Exit(1)
@@ -38,23 +34,20 @@ func main() {
 		fmt.Println("Target not writeable")
 		os.Exit(1)
 	}
-	fmt.Println("Target writeable")
 
-	resSource, err := helper.CollectFileData(src)
+	filesSource, err := helper.CollectFileData(src)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	fmt.Printf("Files in source: %#+v\n", resSource)
 
-	resTarget, err := helper.CollectFileData(target)
+	filesTarget, err := helper.CollectFileData(target)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	fmt.Printf("Files in target: %#+v\n", resTarget)
 
-	diff := helper.CompareFileData(resSource, resTarget)
+	diff := helper.CompareFileData(filesSource, filesTarget)
 	if !helper.IsSyncRequired(*deleteFlag, diff) {
 		fmt.Println("No sync required")
 		os.Exit(0)
