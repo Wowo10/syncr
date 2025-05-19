@@ -28,6 +28,11 @@ func main() {
 	fmt.Println("Target:", target, "->", helper.IsDirectory(target))
 	fmt.Println("Delete-missing:", *deleteFlag)
 
+	if !helper.IsDirectory(src) {
+		fmt.Println("Source not a directory")
+		os.Exit(1)
+	}
+
 	write := helper.IsDirectoryWritable(target)
 	if !write {
 		fmt.Println("Target not writeable")
@@ -35,18 +40,31 @@ func main() {
 	}
 	fmt.Println("Target writeable")
 
-	res, err := helper.CollectFileData(src)
+	resSource, err := helper.CollectFileData(src)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	fmt.Printf("Files in source: %#+v\n", res)
+	fmt.Printf("Files in source: %#+v\n", resSource)
 
-	res2, err := helper.CollectFileData(target)
+	resTarget, err := helper.CollectFileData(target)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	fmt.Printf("Files in target: %#+v\n", res2)
+	fmt.Printf("Files in target: %#+v\n", resTarget)
+
+	diff := helper.CompareFileData(resSource, resTarget)
+
+	helper.ExplainSyncActions(diff)
+
+	var proceed string
+	fmt.Print("Do you want to proceed? (Y/n): ")
+	fmt.Scanln(&proceed)
+
+	if proceed != "Y" && proceed != "y" && proceed != "" {
+		fmt.Println("Operation canceled.")
+		os.Exit(0)
+	}
 
 }

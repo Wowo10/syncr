@@ -72,7 +72,7 @@ func TestCollectFileData(t *testing.T) {
 		t.Fatalf("expected 1 file, got %d", len(files))
 	}
 
-	if files[0].Name != testFilePath {
+	if filepath.Base(files[0].Name) != filepath.Base(testFilePath) {
 		t.Errorf("expected file name %s, got %s", testFilePath, files[0].Name)
 	}
 

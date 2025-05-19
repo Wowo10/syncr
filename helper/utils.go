@@ -62,7 +62,7 @@ func CollectFileData(dir string) (files []FileData, err error) {
 			}
 
 			files = append(files, FileData{
-				Name:        path,
+				Name:        info.Name(),
 				Checksum:    hex.EncodeToString(hash.Sum(nil)),
 				Size:        info.Size(),
 				ModTime:     info.ModTime(),
