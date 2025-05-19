@@ -55,6 +55,10 @@ func main() {
 	fmt.Printf("Files in target: %#+v\n", resTarget)
 
 	diff := helper.CompareFileData(resSource, resTarget)
+	if !helper.IsSyncRequired(*deleteFlag, diff) {
+		fmt.Println("No sync required")
+		os.Exit(0)
+	}
 
 	helper.ExplainSyncActions(diff)
 
@@ -67,4 +71,7 @@ func main() {
 		os.Exit(0)
 	}
 
+	helper.SyncFiles(diff, src, target, *deleteFlag)
+
+	fmt.Println("Done")
 }

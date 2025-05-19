@@ -1,6 +1,15 @@
 package helper
 
-import "fmt"
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"runtime"
+	"sync"
+	"sync/atomic"
+	"time"
+)
 
 type SyncActionType string
 
@@ -65,6 +74,18 @@ func CompareFileData(a, b []FileData) []SyncAction {
 	return actions
 }
 
+func IsSyncRequired(deleteMissing bool, actions []SyncAction) bool {
+	for _, action := range actions {
+		if action.Type == Add || action.Type == Modify {
+			return true
+		}
+		if action.Type == Missing && deleteMissing {
+			return true
+		}
+	}
+	return false
+}
+
 func ExplainSyncActions(actions []SyncAction) {
 	fmt.Println("=== Differences ===")
 	for _, action := range actions {
@@ -90,4 +111,93 @@ func ExplainSyncActions(actions []SyncAction) {
 			fmt.Printf("Missing: %s\n", action.Source.Name)
 		}
 	}
+}
+
+func SyncFiles(actions []SyncAction, sourceRoot, targetRoot string, deleteMissing bool) {
+	var wg sync.WaitGroup
+	actionChan := make(chan SyncAction)
+	var completed int64
+	total := int64(len(actions))
+	workerCount := optimalWorkerCount()
+
+	go func() {
+		for {
+			done := atomic.LoadInt64(&completed)
+			percent := float64(done) / float64(total) * 100
+			fmt.Printf("\rProgress: %.2f%% (%d/%d)", percent, done, total)
+			if done == total {
+				break
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+		fmt.Println()
+	}()
+
+	for range workerCount {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for action := range actionChan {
+				switch action.Type {
+				case Add, Modify:
+					srcPath := filepath.Join(sourceRoot, action.Source.Name)
+					dstPath := filepath.Join(targetRoot, action.Source.Name)
+
+					if err := copyFileWithModTime(srcPath, dstPath); err != nil {
+						fmt.Printf("\nERROR copying %s: %v\n", srcPath, err)
+					}
+				case Missing:
+					if deleteMissing {
+						targetPath := filepath.Join(targetRoot, action.Source.Name)
+						if err := os.Remove(targetPath); err != nil {
+							fmt.Printf("\nERROR deleting %s: %v\n", targetPath, err)
+						}
+					}
+				}
+				atomic.AddInt64(&completed, 1)
+			}
+		}()
+	}
+
+	for _, a := range actions {
+		actionChan <- a
+	}
+	close(actionChan)
+	wg.Wait()
+	return
+}
+
+func copyFileWithModTime(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	info, err := srcFile.Stat()
+	if err != nil {
+		return err
+	}
+
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		return err
+	}
+
+	return os.Chtimes(dst, info.ModTime(), info.ModTime())
+}
+
+func optimalWorkerCount() int {
+	n := runtime.NumCPU()
+	if n < 2 {
+		return 2
+	} else if n > 8 {
+		return 8
+	}
+	return n
 }
