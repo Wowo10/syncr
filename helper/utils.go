@@ -8,7 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"time"
+	"syncr/models"
 )
 
 func IsDirectory(path string) bool {
@@ -30,15 +30,7 @@ func IsDirectoryWritable(dir string) bool {
 	return true
 }
 
-type FileData struct {
-	Name        string
-	Checksum    string
-	Size        int64
-	ModTime     time.Time
-	Permissions os.FileMode
-}
-
-func CollectFileData(dir string) (files []FileData, err error) {
+func CollectFileData(dir string) (files []models.FileData, err error) {
 	err = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -61,7 +53,7 @@ func CollectFileData(dir string) (files []FileData, err error) {
 				return fmt.Errorf("error reading file %s: %w", path, err)
 			}
 
-			files = append(files, FileData{
+			files = append(files, models.FileData{
 				Name:        info.Name(),
 				Checksum:    hex.EncodeToString(hash.Sum(nil)),
 				Size:        info.Size(),

@@ -1,34 +1,22 @@
-package helper
+package synchronize
 
 import (
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"syncr/models"
 	"time"
 )
 
-type SyncActionType string
-
-const (
-	Add     SyncActionType = "Add"
-	Modify  SyncActionType = "Modify"
-	Missing SyncActionType = "Missing"
-)
-
-type SyncAction struct {
-	Type   SyncActionType
-	Source FileData
-	Target *FileData
-}
-
-func CompareFileData(a, b []FileData) []SyncAction {
-	mapA := make(map[string]FileData)
-	mapB := make(map[string]FileData)
-	var actions []SyncAction
+func CompareFileData(a, b []models.FileData) []models.SyncAction {
+	mapA := make(map[string]models.FileData)
+	mapB := make(map[string]models.FileData)
+	var actions []models.SyncAction
 
 	for _, f := range a {
 		mapA[f.Name] = f
@@ -46,15 +34,15 @@ func CompareFileData(a, b []FileData) []SyncAction {
 				fileA.Size != fileB.Size ||
 				!fileA.ModTime.Equal(fileB.ModTime) ||
 				fileA.Permissions != fileB.Permissions {
-				actions = append(actions, SyncAction{
-					Type:   Modify,
+				actions = append(actions, models.SyncAction{
+					Type:   models.Modify,
 					Source: fileA,
 					Target: &fileB,
 				})
 			}
 		} else {
-			actions = append(actions, SyncAction{
-				Type:   Add,
+			actions = append(actions, models.SyncAction{
+				Type:   models.Add,
 				Source: fileA,
 				Target: nil,
 			})
@@ -63,8 +51,8 @@ func CompareFileData(a, b []FileData) []SyncAction {
 
 	for name, fileB := range mapB {
 		if !seen[name] {
-			actions = append(actions, SyncAction{
-				Type:   Missing,
+			actions = append(actions, models.SyncAction{
+				Type:   models.Missing,
 				Source: fileB,
 				Target: nil,
 			})
@@ -74,25 +62,25 @@ func CompareFileData(a, b []FileData) []SyncAction {
 	return actions
 }
 
-func IsSyncRequired(deleteMissing bool, actions []SyncAction) bool {
+func IsSyncRequired(deleteMissing bool, actions []models.SyncAction) bool {
 	for _, action := range actions {
-		if action.Type == Add || action.Type == Modify {
+		if action.Type == models.Add || action.Type == models.Modify {
 			return true
 		}
-		if action.Type == Missing && deleteMissing {
+		if action.Type == models.Missing && deleteMissing {
 			return true
 		}
 	}
 	return false
 }
 
-func ExplainSyncActions(actions []SyncAction) {
+func ExplainSyncActions(actions []models.SyncAction) {
 	fmt.Println("=== Differences ===")
 	for _, action := range actions {
 		switch action.Type {
-		case Add:
+		case models.Add:
 			fmt.Printf("Add: %s\n", action.Source.Name)
-		case Modify:
+		case models.Modify:
 			fmt.Printf("Modify: %s\n", action.Source.Name)
 
 			if action.Source.Checksum != action.Target.Checksum {
@@ -107,7 +95,7 @@ func ExplainSyncActions(actions []SyncAction) {
 			if action.Source.Permissions != action.Target.Permissions {
 				fmt.Printf("  - Permissions changed: %s → %s\n", action.Source.Permissions, action.Target.Permissions)
 			}
-		case Missing:
+		case models.Missing:
 			fmt.Printf("Missing: %s\n", action.Source.Name)
 		}
 	}
@@ -115,9 +103,9 @@ func ExplainSyncActions(actions []SyncAction) {
 
 type SyncDone struct{}
 
-func SyncFiles(actions []SyncAction, sourceRoot, targetRoot string, deleteMissing bool) {
+func SyncFiles(actions []models.SyncAction, sourceRoot, targetRoot string, deleteMissing bool) {
 	var wg sync.WaitGroup
-	actionChan := make(chan SyncAction)
+	actionChan := make(chan models.SyncAction)
 	syncDoneChan := make(chan SyncDone)
 	var completed int64
 	total := int64(len(actions))
@@ -146,18 +134,18 @@ func SyncFiles(actions []SyncAction, sourceRoot, targetRoot string, deleteMissin
 			defer wg.Done()
 			for action := range actionChan {
 				switch action.Type {
-				case Add, Modify:
+				case models.Add, models.Modify:
 					srcPath := filepath.Join(sourceRoot, action.Source.Name)
 					dstPath := filepath.Join(targetRoot, action.Source.Name)
 
 					if err := copyFileWithModTimeAndPermissions(srcPath, dstPath); err != nil {
-						fmt.Printf("\nERROR copying %s: %v\n", srcPath, err)
+						log.Printf("\nERROR copying %s: %v\n", srcPath, err)
 					}
-				case Missing:
+				case models.Missing:
 					if deleteMissing {
 						targetPath := filepath.Join(targetRoot, action.Source.Name)
 						if err := os.Remove(targetPath); err != nil {
-							fmt.Printf("\nERROR deleting %s: %v\n", targetPath, err)
+							log.Printf("\nERROR deleting %s: %v\n", targetPath, err)
 						}
 					}
 				}
@@ -170,8 +158,8 @@ func SyncFiles(actions []SyncAction, sourceRoot, targetRoot string, deleteMissin
 		actionChan <- a
 	}
 	close(actionChan)
-	close(syncDoneChan)
 	wg.Wait()
+	close(syncDoneChan)
 	return
 }
 
