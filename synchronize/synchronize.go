@@ -104,24 +104,27 @@ func ExplainSyncActions(actions []models.SyncAction) {
 type SyncDone struct{}
 
 func SyncFiles(actions []models.SyncAction, sourceRoot, targetRoot string, deleteMissing bool) {
-	var wg sync.WaitGroup
+	var workerWg sync.WaitGroup
+	var progressWg sync.WaitGroup
 	actionChan := make(chan models.SyncAction)
-	syncDoneChan := make(chan SyncDone)
+	doneChan := make(chan SyncDone)
 	var completed int64
 	total := int64(len(actions))
 	workerCount := optimalWorkerCount()
 
+	progressWg.Add(1)
 	go func() {
+		defer progressWg.Done()
 		ticker := time.NewTicker(200 * time.Millisecond)
 		defer ticker.Stop()
 
 		for {
 			select {
 			case <-ticker.C:
-				done := atomic.LoadInt64(&completed)
-				percent := float64(done) / float64(total) * 100
-				fmt.Printf("\rProgress: %.2f%% (%d/%d)", percent, done, total)
-			case <-syncDoneChan:
+				doneCount := atomic.LoadInt64(&completed)
+				percent := float64(doneCount) / float64(total) * 100
+				fmt.Printf("\rProgress: %.2f%% (%d/%d)", percent, doneCount, total)
+			case <-doneChan:
 				fmt.Printf("\rProgress: 100.00%% (%d/%d)\n", total, total)
 				return
 			}
@@ -129,9 +132,9 @@ func SyncFiles(actions []models.SyncAction, sourceRoot, targetRoot string, delet
 	}()
 
 	for range workerCount {
-		wg.Add(1)
+		workerWg.Add(1)
 		go func() {
-			defer wg.Done()
+			defer workerWg.Done()
 			for action := range actionChan {
 				switch action.Type {
 				case models.Add, models.Modify:
@@ -154,13 +157,16 @@ func SyncFiles(actions []models.SyncAction, sourceRoot, targetRoot string, delet
 		}()
 	}
 
-	for _, a := range actions {
-		actionChan <- a
-	}
-	close(actionChan)
-	close(syncDoneChan)
-	wg.Wait()
-	return
+	go func() {
+		for _, a := range actions {
+			actionChan <- a
+		}
+		close(actionChan)
+		workerWg.Wait()
+		close(doneChan)
+	}()
+
+	progressWg.Wait()
 }
 
 func copyFileWithModTimeAndPermissions(src, dst string) error {
