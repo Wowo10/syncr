@@ -57,6 +57,41 @@ go build -o syncr .
 ./syncr --delete-missing ./test/source ./test/target
 ```
 
+## ⭐ Random File Generator Script
+
+Use the create_random_file.sh script to generate a single large file filled with random data — useful for testing sync speed, integrity checks, and progress reporting.
+
+```bash
+# Usage: ./create_random_file.sh [output_path] [size_in_mib]
+#
+# Arguments:
+#   output_path   Path to the output file (default: random_1gb.bin)
+#   size_in_mib   Size of the file in MiB (default: 1024 MiB = 1 GiB)
+#
+# This script:
+# - Ensures the parent directory exists
+# - Uses /dev/urandom to fill the file with random data
+# - Displays progress during file creation
+
+OUTPUT_FILE=${1:-random_1gb.bin}
+SIZE_MB=${2:-1024}
+
+mkdir -p "$(dirname "$OUTPUT_FILE")"
+
+echo "Creating $SIZE_MB MiB random file at: $OUTPUT_FILE"
+dd if=/dev/urandom of="$OUTPUT_FILE" bs=1M count="$SIZE_MB" status=progress
+
+echo "Done."
+```
+
+### Example Usage
+
+```bash
+./create_random_file.sh ./test/source/file1.bin 512   # Creates a 512 MiB file
+./create_random_file.sh ./bigfile.bin                 # Creates a 1 GiB file
+for i in {1..5}; do ./create_large_file.sh "test/file_$i.bin" 100; done
+```
+
 ---
 
 ## 🛠 Development
