@@ -158,8 +158,8 @@ func SyncFiles(actions []models.SyncAction, sourceRoot, targetRoot string, delet
 		actionChan <- a
 	}
 	close(actionChan)
-	wg.Wait()
 	close(syncDoneChan)
+	wg.Wait()
 	return
 }
 
